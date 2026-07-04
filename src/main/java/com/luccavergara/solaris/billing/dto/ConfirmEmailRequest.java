@@ -1,6 +1,6 @@
 package com.luccavergara.solaris.billing.dto;
 
-import jakarta.validation.constraints.Email;
+import com.luccavergara.solaris.billing.validation.ValidBillingEmail;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
@@ -11,7 +11,7 @@ import lombok.Setter;
 public class ConfirmEmailRequest {
 
     @NotBlank
-    @Email
+    @ValidBillingEmail
     private String email;
 
     @NotBlank

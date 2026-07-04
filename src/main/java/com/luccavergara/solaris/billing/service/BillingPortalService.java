@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
+import com.luccavergara.solaris.billing.util.EmailNormalizer;
 import java.util.UUID;
 
 @Service
@@ -157,7 +157,11 @@ public class BillingPortalService {
     }
 
     private String normalizeEmail(String email) {
-        return email.trim().toLowerCase(Locale.ROOT);
+        String normalized = EmailNormalizer.normalize(email);
+        if (!EmailNormalizer.isValid(normalized)) {
+            throw new IllegalArgumentException("Invalid email format");
+        }
+        return normalized;
     }
 
     private String generateOtp() {

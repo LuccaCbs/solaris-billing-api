@@ -149,6 +149,19 @@ button[type="submit"]:disabled {
     border-radius: 12px;
     padding: 1rem;
     background: #111822;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+}
+
+.org-card-btn {
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.org-card-btn:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
 }
 
 .org-card h2 {

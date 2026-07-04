@@ -2,6 +2,7 @@ package com.luccavergara.solaris.billing.controller;
 
 import com.luccavergara.solaris.billing.dto.*;
 import com.luccavergara.solaris.billing.service.BillingPortalService;
+import com.luccavergara.solaris.billing.service.StoreAddonCheckoutService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import java.util.UUID;
 public class BillingPublicController {
 
     private final BillingPortalService billingPortalService;
+    private final StoreAddonCheckoutService storeAddonCheckoutService;
 
     @PostMapping("/verify-email")
     public MessageResponse verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
@@ -29,5 +31,15 @@ public class BillingPublicController {
     @GetMapping("/organizations")
     public List<BillingOrganizationResponse> listOrganizations(@RequestParam UUID sessionId) {
         return billingPortalService.listOrganizations(sessionId);
+    }
+
+    @PostMapping("/checkout/store-addon")
+    public StoreAddonCheckoutResponse checkoutStoreAddon(@Valid @RequestBody StoreAddonCheckoutRequest request) {
+        int quantity = request.getQuantity() != null ? request.getQuantity() : 1;
+        return storeAddonCheckoutService.createCheckout(
+                request.getSessionId(),
+                request.getOrganizationId(),
+                quantity
+        );
     }
 }
