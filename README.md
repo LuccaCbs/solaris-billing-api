@@ -45,6 +45,8 @@ Open http://localhost:8081
 | `'url' must start with "jdbc"` | `DATABASE_URL` missing or invalid. |
 | `DATABASE_URL is not configured` | No `.env` / env vars before startup. |
 
+**Success:** the console shows `Tomcat started on port 8081 (http)` and http://localhost:8081 loads the billing portal.
+
 ## Public API (Sprint 1)
 
 | Method | Path | Description |
@@ -59,6 +61,21 @@ Open http://localhost:8081
 2. Set env vars: `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `RESEND_API_KEY`, `EMAIL_FROM`, `BILLING_PORTAL_URL`.
 3. Use Docker or `mvn -DskipTests package` + `java -jar target/solaris-billing-api-0.0.1-SNAPSHOT.jar`.
 4. Point `pay.solarismanager.com` to this service.
+
+### One-time production recovery (shared Neon DB)
+
+If the first deploy baselined `flyway_billing_history` at version 1 **without** creating the billing portal tables (missing `billing_portal_email_challenges`), fix Neon once before redeploying:
+
+**Option A — run V1 SQL manually** (see `src/main/resources/db/migration/V1__billing_portal_tables.sql`), then redeploy.
+
+**Option B — reset Flyway history and redeploy** (only if billing portal tables do not exist yet):
+
+```sql
+DELETE FROM flyway_billing_history;
+-- or: DROP TABLE flyway_billing_history;
+```
+
+After either option, redeploy with `spring.flyway.baseline-version=0` so V1 runs on existing databases that already contain `solaris-api` tables.
 
 ## Roadmap
 

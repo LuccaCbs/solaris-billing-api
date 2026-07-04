@@ -22,5 +22,6 @@ if (-not $env:DATABASE_URL -or -not $env:DATABASE_URL.StartsWith("jdbc:")) {
     exit 1
 }
 
-Write-Host "Starting solaris-billing-api on port $($env:PORT ?? '8081')..." -ForegroundColor Green
+$port = if ($env:PORT) { $env:PORT } else { "8081" }
+Write-Host "Starting solaris-billing-api on port $port..." -ForegroundColor Green
 mvn spring-boot:run
