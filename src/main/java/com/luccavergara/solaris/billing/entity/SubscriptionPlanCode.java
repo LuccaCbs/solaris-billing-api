@@ -1,5 +1,8 @@
 package com.luccavergara.solaris.billing.entity;
 
 public enum SubscriptionPlanCode {
-    POS
+    POS,
+    BUSINESS,
+    SCALE,
+    INTERNAL
 }
