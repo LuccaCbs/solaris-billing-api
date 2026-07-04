@@ -57,6 +57,11 @@
             <optional>true</optional>
         </dependency>
         <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>28.2.0</version>
+        </dependency>
+        <dependency>
             <groupId>com.resend</groupId>
             <artifactId>resend-java</artifactId>
             <version>4.4.0</version>

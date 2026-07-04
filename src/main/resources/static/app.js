@@ -192,13 +192,21 @@ function openCheckout(org) {
     selectedOrganization = org;
     checkoutOrgName.textContent = `Organización: ${org.displayName || org.name}`;
 
-    const isArgentina = String(org.countryCode || '').toUpperCase() === 'AR';
-    const checkoutBtn = document.getElementById('checkout-btn');
-    checkoutBtn.disabled = !isArgentina;
-    checkoutBtn.textContent = isArgentina ? 'Pagar con Mercado Pago' : 'Stripe (próximamente)';
+    const countryCode = String(org.countryCode || '').toUpperCase();
+    const currency = String(org.currency || '').toUpperCase();
+    const isArgentina = countryCode === 'AR';
+    const isStripe = countryCode === 'ES' || currency === 'EUR';
 
-    if (!isArgentina) {
-        showAlert('Por ahora solo Mercado Pago está disponible para organizaciones AR.', 'error');
+    const checkoutBtn = document.getElementById('checkout-btn');
+    checkoutBtn.disabled = !(isArgentina || isStripe);
+
+    if (isArgentina) {
+        checkoutBtn.textContent = 'Pagar con Mercado Pago';
+    } else if (isStripe) {
+        checkoutBtn.textContent = 'Pagar con Stripe';
+    } else {
+        checkoutBtn.textContent = 'Checkout no disponible';
+        showAlert('Checkout no disponible para esta organización.', 'error');
     }
 
     document.getElementById('quantity').value = '1';

@@ -25,6 +25,11 @@ public class SubscriptionFulfillmentService {
 
     @Transactional
     public void applyStoreAddonPurchase(Long organizationId, int quantity) {
+        applyStoreAddonPurchase(organizationId, quantity, BillingProvider.MERCADOPAGO);
+    }
+
+    @Transactional
+    public void applyStoreAddonPurchase(Long organizationId, int quantity, BillingProvider billingProvider) {
         OrganizationSubscription subscription = subscriptionRepository.findByOrganizationId(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Subscription not found for organization"));
 
@@ -33,7 +38,7 @@ public class SubscriptionFulfillmentService {
         }
 
         subscription.setExtraStoresPurchased(subscription.getExtraStoresPurchased() + quantity);
-        subscription.setBillingProvider(BillingProvider.MERCADOPAGO);
+        subscription.setBillingProvider(billingProvider);
         subscription.setUpdatedAt(LocalDateTime.now());
         subscriptionRepository.save(subscription);
     }

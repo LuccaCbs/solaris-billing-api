@@ -39,6 +39,45 @@ public class EmailService {
         }
     }
 
+    public void sendPurchaseConfirmation(String to, String organizationName, int quantity, String activationCode) {
+        if (resendApiKey == null || resendApiKey.isBlank()) {
+            System.out.println("==================================================");
+            System.out.println("RESEND_API_KEY not configured.");
+            System.out.println("SOLARIS PURCHASE CONFIRMATION for " + to);
+            System.out.println("Org: " + organizationName + " | Qty: " + quantity + " | Code: " + activationCode);
+            System.out.println("==================================================");
+            return;
+        }
+
+        Resend resend = new Resend(resendApiKey);
+
+        CreateEmailOptions params = CreateEmailOptions.builder()
+                .from("Solaris Billing <" + emailFrom + ">")
+                .to(to)
+                .subject("Solaris purchase confirmed")
+                .html(buildPurchaseConfirmationEmail(organizationName, quantity, activationCode))
+                .build();
+
+        try {
+            resend.emails().send(params);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Could not send purchase confirmation email: " + exception.getMessage());
+        }
+    }
+
+    private String buildPurchaseConfirmationEmail(String organizationName, int quantity, String activationCode) {
+        return """
+                <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+                  <h2>Solaris Billing</h2>
+                  <p>Your purchase was confirmed.</p>
+                  <p><strong>Organization:</strong> %s</p>
+                  <p><strong>Additional stores:</strong> %d</p>
+                  <p><strong>Reference code:</strong> <code>%s</code></p>
+                  <p>The add-on is already active on your organization. You can close this email.</p>
+                </div>
+                """.formatted(organizationName, quantity, activationCode);
+    }
+
     private String buildOtpEmail(String otp) {
         return """
                 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
