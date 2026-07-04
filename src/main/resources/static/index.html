@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solaris Billing</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <main class="container">
+        <header class="header">
+            <div class="logo">Solaris</div>
+            <p class="subtitle">Portal de facturación</p>
+        </header>
+
+        <section id="step-email" class="card">
+            <h1>Verificá tu email</h1>
+            <p>Ingresá el email de tu cuenta Solaris para gestionar suscripciones y add-ons.</p>
+            <form id="email-form">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" required autocomplete="email" placeholder="tu@empresa.com">
+                <button type="submit" id="send-code-btn">Enviar código</button>
+            </form>
+        </section>
+
+        <section id="step-otp" class="card hidden">
+            <h1>Ingresá el código</h1>
+            <p>Te enviamos un código de 6 dígitos a <strong id="otp-email"></strong>.</p>
+            <form id="otp-form">
+                <label for="otp">Código</label>
+                <input id="otp" name="otp" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="000000">
+                <button type="submit" id="confirm-code-btn">Continuar</button>
+            </form>
+            <button type="button" class="link-btn" id="back-to-email">Usar otro email</button>
+        </section>
+
+        <section id="step-orgs" class="card hidden">
+            <h1>Elegí una organización</h1>
+            <p>Seleccioná la organización para la que querés gestionar la facturación.</p>
+            <div id="org-list" class="org-list"></div>
+            <p class="hint">El checkout con Mercado Pago / Stripe estará disponible en el próximo sprint.</p>
+        </section>
+
+        <div id="alert" class="alert hidden" role="alert"></div>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>
