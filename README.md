@@ -12,16 +12,38 @@ External billing portal for Solaris ERP. Sprint 1 provides email OTP verificatio
 
 ## Local development
 
-```bash
-export DATABASE_URL=jdbc:postgresql://...
-export DATABASE_USERNAME=...
-export DATABASE_PASSWORD=...
-export RESEND_API_KEY=re_...   # optional; OTP prints to console if omitted
+1. Copy env template:
 
+```bash
+cp .env.example .env
+```
+
+2. Fill `.env` with the same Neon credentials as `solaris-api` (`DATABASE_URL` must start with `jdbc:postgresql://`).
+
+3. Start the server:
+
+```powershell
+.\run-local.ps1
+```
+
+Or manually:
+
+```powershell
+$env:DATABASE_URL="jdbc:postgresql://..."
+$env:DATABASE_USERNAME="..."
+$env:DATABASE_PASSWORD="..."
 mvn spring-boot:run
 ```
 
 Open http://localhost:8081
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---------|--------|
+| `ERR_CONNECTION_REFUSED` on :8081 | The server is not running (nothing listening on that port). |
+| `'url' must start with "jdbc"` | `DATABASE_URL` missing or invalid. |
+| `DATABASE_URL is not configured` | No `.env` / env vars before startup. |
 
 ## Public API (Sprint 1)
 
