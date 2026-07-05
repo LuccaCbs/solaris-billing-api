@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface OrganizationMemberRepository extends JpaRepository<OrganizationMember, Long> {
 
@@ -36,5 +37,16 @@ public interface OrganizationMemberRepository extends JpaRepository<Organization
             @Param("organizationId") Long organizationId,
             @Param("email") String email,
             @Param("status") OrganizationMemberStatus status
+    );
+
+    Optional<OrganizationMember> findFirstByOrganizationIdAndRoleAndStatus(
+            Long organizationId,
+            OrganizationMemberRole role,
+            OrganizationMemberStatus status
+    );
+
+    Optional<OrganizationMember> findFirstByOrganizationIdAndStatus(
+            Long organizationId,
+            OrganizationMemberStatus status
     );
 }

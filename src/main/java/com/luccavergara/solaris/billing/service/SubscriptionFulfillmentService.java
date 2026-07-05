@@ -19,6 +19,7 @@ public class SubscriptionFulfillmentService {
 
     private final OrganizationSubscriptionRepository subscriptionRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
+    private final OrganizationInventorySeedService organizationInventorySeedService;
 
     @Transactional
     public OrganizationSubscription ensureSubscription(Organization organization) {
@@ -73,6 +74,8 @@ public class SubscriptionFulfillmentService {
         subscription.setTrialEndsAt(null);
         subscription.setUpdatedAt(now);
         subscriptionRepository.save(subscription);
+
+        organizationInventorySeedService.seedDefaultCategoryIfMissing(organizationId);
     }
 
     private OrganizationSubscription createDefaultSubscription(Organization organization) {
