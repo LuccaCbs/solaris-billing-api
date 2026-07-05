@@ -12,6 +12,7 @@ import java.util.List;
 public class PlanCatalogResponse {
 
     private final List<PlanResponse> plans;
+    private final FreemiumPlanResponse freemiumPlan;
     private final String currency;
 
     @Getter
@@ -20,8 +21,20 @@ public class PlanCatalogResponse {
         private final SubscriptionPlanCode code;
         private final String displayName;
         private final String description;
+        private final String tagline;
+        private final boolean recommended;
+        private final List<String> features;
         private final Integer maxStores;
         private final BigDecimal price;
         private final String currency;
+    }
+
+    @Getter
+    @Builder
+    public static class FreemiumPlanResponse {
+        private final SubscriptionPlanCode code;
+        private final String displayName;
+        private final String tagline;
+        private final List<String> features;
     }
 }

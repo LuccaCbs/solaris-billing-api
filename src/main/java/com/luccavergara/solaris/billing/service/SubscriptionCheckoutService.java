@@ -70,8 +70,8 @@ public class SubscriptionCheckoutService {
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
 
         subscriptionPlanRepository.findById(planCode)
-                .filter(SubscriptionPlan::isPublic)
                 .filter(SubscriptionPlan::isActive)
+                .filter(plan -> isCheckoutAllowed(plan, planCode, promoCode))
                 .orElseThrow(() -> new IllegalArgumentException("Plan is not available for purchase"));
 
         assertBillableMembership(session.getUser(), organization);
@@ -83,6 +83,10 @@ public class SubscriptionCheckoutService {
                 promoCode,
                 session.getUser().getId()
         );
+
+        if (planCode == SubscriptionPlanCode.POS && quote.promoCode() == null) {
+            throw new IllegalArgumentException("A promo code is required to activate the freemium plan");
+        }
 
         if (quote.finalPrice().compareTo(BigDecimal.ZERO) <= 0) {
             return fulfillFreeCheckout(session, organization, quote);
@@ -253,6 +257,14 @@ public class SubscriptionCheckoutService {
                 : organization.getRazonSocial();
 
         emailService.sendPurchaseConfirmation(session.getEmail(), orgName, 1, "SOL-" + paymentIntentId);
+    }
+
+    private boolean isCheckoutAllowed(SubscriptionPlan plan, SubscriptionPlanCode planCode, String promoCode) {
+        if (planCode == SubscriptionPlanCode.POS) {
+            return StringUtils.hasText(promoCode);
+        }
+
+        return plan.isPublic();
     }
 
     private void assertBillableMembership(SolarisUser user, Organization organization) {

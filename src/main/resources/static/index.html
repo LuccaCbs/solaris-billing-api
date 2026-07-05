@@ -41,21 +41,50 @@
             <p class="hint" id="checkout-hint">Seleccioná una organización para continuar.</p>
         </section>
 
-        <section id="step-plans" class="card hidden">
-            <h1>Elegí un plan</h1>
-            <p id="plans-org-name"></p>
-            <div id="plan-list" class="org-list"></div>
-            <form id="promo-form" class="promo-form">
-                <label for="promo-code">Código promocional (opcional)</label>
-                <div class="promo-row">
-                    <input id="promo-code" name="promoCode" type="text" placeholder="SOLARIS-2026">
-                    <button type="button" id="preview-promo-btn">Validar</button>
+        <section id="step-plans" class="card card--wide hidden">
+            <div class="plans-header">
+                <div>
+                    <h1>Gestioná tu plan</h1>
+                    <p class="plans-subtitle">Podés gestionar plan, sucursales y pagos desde acá.</p>
+                    <p id="plans-org-name" class="plans-org-name"></p>
                 </div>
-                <p id="promo-preview" class="hint"></p>
+                <div class="plans-action-bar">
+                    <button type="button" class="action-link" id="open-addon-btn">Comprar sucursal adicional</button>
+                    <button type="button" class="action-link" id="back-to-orgs-from-plans">Cambiar organización</button>
+                </div>
+            </div>
+
+            <div id="plan-grid" class="plan-grid"></div>
+
+            <div id="checkout-panel" class="checkout-panel hidden">
+                <h2 id="checkout-panel-title">Completar suscripción</h2>
+                <p id="checkout-panel-plan" class="checkout-panel-plan"></p>
+                <form id="promo-form" class="promo-form">
+                    <label for="promo-code">Código promocional (opcional)</label>
+                    <div class="promo-row">
+                        <input id="promo-code" name="promoCode" type="text" placeholder="SOLARIS-2026">
+                        <button type="button" id="preview-promo-btn" class="btn-secondary">Validar</button>
+                    </div>
+                    <p id="promo-preview" class="hint"></p>
+                </form>
+                <button type="button" id="subscribe-btn" class="btn-primary">Suscribirse</button>
+            </div>
+        </section>
+
+        <section id="step-freemium-redeem" class="card hidden">
+            <h1>Activar Freemium / POS</h1>
+            <p id="freemium-org-name"></p>
+            <p>Ingresá tu código promocional para activar el plan gratuito.</p>
+            <form id="freemium-form">
+                <label for="freemium-promo-code">Código promocional</label>
+                <div class="promo-row">
+                    <input id="freemium-promo-code" name="freemiumPromoCode" type="text" required placeholder="TU-CODIGO-PROMO">
+                    <button type="button" id="preview-freemium-promo-btn" class="btn-secondary">Validar</button>
+                </div>
+                <p id="freemium-promo-preview" class="hint"></p>
+                <button type="submit" id="redeem-freemium-btn" class="btn-primary">Activar plan</button>
             </form>
-            <button type="button" id="subscribe-btn" disabled>Suscribirse</button>
-            <button type="button" class="link-btn" id="open-addon-btn">Comprar sucursal adicional</button>
-            <button type="button" class="link-btn" id="back-to-orgs-from-plans">Elegir otra organización</button>
+            <button type="button" class="link-btn" id="back-to-plans-from-freemium">Volver a planes</button>
         </section>
 
         <section id="step-checkout" class="card hidden">
@@ -66,7 +95,8 @@
                 <input id="quantity" name="quantity" type="number" min="1" max="10" value="1" required>
                 <button type="submit" id="checkout-btn">Pagar con Mercado Pago</button>
             </form>
-            <button type="button" class="link-btn" id="back-to-orgs">Elegir otra organización</button>
+            <button type="button" class="link-btn" id="back-to-plans-from-addon">Volver a planes</button>
+            <button type="button" class="link-btn" id="back-to-orgs">Cambiar organización</button>
         </section>
 
         <div id="alert" class="alert hidden" role="alert"></div>
