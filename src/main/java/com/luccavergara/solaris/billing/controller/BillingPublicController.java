@@ -28,6 +28,11 @@ public class BillingPublicController {
         return billingPortalService.confirmEmail(request.getEmail(), request.getOtp());
     }
 
+    @PostMapping("/session/from-app-token")
+    public BillingSessionResponse createSessionFromAppToken(@Valid @RequestBody AppBillingTokenRequest request) {
+        return billingPortalService.createSessionFromAppToken(request.getBillingToken());
+    }
+
     @GetMapping("/organizations")
     public List<BillingOrganizationResponse> listOrganizations(@RequestParam UUID sessionId) {
         return billingPortalService.listOrganizations(sessionId);

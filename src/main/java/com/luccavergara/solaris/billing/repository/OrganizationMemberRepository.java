@@ -25,4 +25,16 @@ public interface OrganizationMemberRepository extends JpaRepository<Organization
             @Param("status") OrganizationMemberStatus status,
             @Param("roles") List<OrganizationMemberRole> roles
     );
+
+    @Query("""
+            SELECT om.role FROM OrganizationMember om
+            WHERE om.organization.id = :organizationId
+              AND LOWER(om.user.email) = LOWER(:email)
+              AND om.status = :status
+            """)
+    java.util.Optional<OrganizationMemberRole> findRoleByOrganizationIdAndUserEmailIgnoreCaseAndStatus(
+            @Param("organizationId") Long organizationId,
+            @Param("email") String email,
+            @Param("status") OrganizationMemberStatus status
+    );
 }

@@ -112,7 +112,7 @@ otpForm.addEventListener('submit', async (event) => {
         const otp = document.getElementById('otp').value.trim();
         const session = await apiPost('/confirm-email', { email: currentEmail, otp });
         sessionId = session.sessionId;
-        await loadOrganizations();
+        await loadOrganizations(session.preferredOrganizationId ?? null);
         showStep(stepOrgs);
     } catch (error) {
         showAlert(error.message);
@@ -163,17 +163,25 @@ backToOrgsBtn.addEventListener('click', () => {
     showStep(stepOrgs);
 });
 
-async function loadOrganizations() {
+async function loadOrganizations(preferredOrganizationId = null) {
     orgList.innerHTML = '';
     const organizations = await apiGet(`/organizations?sessionId=${sessionId}`);
 
     if (!organizations.length) {
         orgList.innerHTML = '<p>No hay organizaciones disponibles para este usuario.</p>';
         checkoutHint.textContent = '';
-        return;
+        return organizations;
     }
 
     checkoutHint.textContent = 'Seleccioná una organización para continuar con el checkout.';
+
+    if (preferredOrganizationId != null) {
+        const preferred = organizations.find((org) => org.id === preferredOrganizationId);
+        if (preferred) {
+            openCheckout(preferred);
+            return organizations;
+        }
+    }
 
     organizations.forEach((org) => {
         const card = document.createElement('button');
@@ -186,6 +194,8 @@ async function loadOrganizations() {
         card.addEventListener('click', () => openCheckout(org));
         orgList.appendChild(card);
     });
+
+    return organizations;
 }
 
 function openCheckout(org) {
@@ -234,3 +244,29 @@ if (paymentStatus) {
         paymentStatus === 'success' ? 'success' : 'error'
     );
 }
+
+async function tryAppBillingTokenLogin() {
+    const billingToken = urlParams.get('billingToken');
+    if (!billingToken) {
+        return false;
+    }
+
+    try {
+        const session = await apiPost('/session/from-app-token', { billingToken });
+        currentEmail = sanitizeEmail(session.email);
+        sessionId = session.sessionId;
+        document.getElementById('email').value = currentEmail;
+        await loadOrganizations(session.preferredOrganizationId ?? null);
+        showStep(stepOrgs);
+        showAlert(`Sesión iniciada como ${currentEmail}`, 'success');
+        return true;
+    } catch (error) {
+        showAlert(
+            error.message || 'No se pudo usar el enlace de la app. Ingresá tu email manualmente.'
+        );
+        showStep(stepEmail);
+        return false;
+    }
+}
+
+void tryAppBillingTokenLogin();

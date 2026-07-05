@@ -13,4 +13,5 @@ public class BillingSessionResponse {
     private final UUID sessionId;
     private final String email;
     private final LocalDateTime expiresAt;
+    private final Long preferredOrganizationId;
 }

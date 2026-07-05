@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.luccavergara.solaris.billing.security.SolarisJwtService;
 import com.luccavergara.solaris.billing.util.EmailNormalizer;
 import java.util.UUID;
 
@@ -33,6 +34,7 @@ public class BillingPortalService {
     private final BillingPortalSessionRepository sessionRepository;
     private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
+    private final SolarisJwtService solarisJwtService;
 
     @Value("${application.billing.otp-expiration-minutes:10}")
     private int otpExpirationMinutes;
@@ -121,6 +123,46 @@ public class BillingPortalService {
                 .sessionId(sessionId)
                 .email(user.getEmail())
                 .expiresAt(expiresAt)
+                .build();
+    }
+
+    @Transactional
+    public BillingSessionResponse createSessionFromAppToken(String billingToken) {
+        SolarisJwtService.AppBillingClaims claims = solarisJwtService.parseAppBillingToken(billingToken);
+
+        OrganizationMemberRole role = organizationMemberRepository
+                .findRoleByOrganizationIdAndUserEmailIgnoreCaseAndStatus(
+                        claims.organizationId(),
+                        claims.email(),
+                        OrganizationMemberStatus.ACTIVE
+                )
+                .orElseThrow(() -> new IllegalArgumentException("Billing token is no longer valid for this organization"));
+
+        if (role.getPrivilegeLevel() < OrganizationMemberRole.ADMIN.getPrivilegeLevel()) {
+            throw new IllegalStateException("This email is not authorized to manage billing for this organization");
+        }
+
+        SolarisUser user = userRepository.findById(claims.userId())
+                .filter(found -> found.getEmail().equalsIgnoreCase(claims.email()))
+                .orElseThrow(() -> new IllegalArgumentException("Billing token is no longer valid for this user"));
+
+        UUID sessionId = UUID.randomUUID();
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(sessionExpirationMinutes);
+
+        BillingPortalSession session = BillingPortalSession.builder()
+                .id(sessionId)
+                .user(user)
+                .email(user.getEmail())
+                .expiresAt(expiresAt)
+                .build();
+
+        sessionRepository.save(session);
+
+        return BillingSessionResponse.builder()
+                .sessionId(sessionId)
+                .email(user.getEmail())
+                .expiresAt(expiresAt)
+                .preferredOrganizationId(claims.organizationId())
                 .build();
     }
 
