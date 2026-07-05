@@ -29,6 +29,16 @@ public class BillingPortalPaymentIntent {
     @Column(name = "product_code", nullable = false, length = 50)
     private String productCode;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "plan_code", length = 50)
+    private SubscriptionPlanCode planCode;
+
+    @Column(name = "promo_code_id")
+    private Long promoCodeId;
+
+    @Column(name = "final_amount")
+    private java.math.BigDecimal finalAmount;
+
     @Column(nullable = false)
     @Builder.Default
     private Integer quantity = 1;

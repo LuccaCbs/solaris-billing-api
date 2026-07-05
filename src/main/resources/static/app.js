@@ -3,6 +3,7 @@ const API_BASE = window.location.origin + '/api/v1/public';
 const stepEmail = document.getElementById('step-email');
 const stepOtp = document.getElementById('step-otp');
 const stepOrgs = document.getElementById('step-orgs');
+const stepPlans = document.getElementById('step-plans');
 const stepCheckout = document.getElementById('step-checkout');
 const alertBox = document.getElementById('alert');
 const emailForm = document.getElementById('email-form');
@@ -10,14 +11,23 @@ const otpForm = document.getElementById('otp-form');
 const checkoutForm = document.getElementById('checkout-form');
 const otpEmailLabel = document.getElementById('otp-email');
 const orgList = document.getElementById('org-list');
+const planList = document.getElementById('plan-list');
 const checkoutOrgName = document.getElementById('checkout-org-name');
+const plansOrgName = document.getElementById('plans-org-name');
 const checkoutHint = document.getElementById('checkout-hint');
+const promoPreview = document.getElementById('promo-preview');
 const backToEmailBtn = document.getElementById('back-to-email');
 const backToOrgsBtn = document.getElementById('back-to-orgs');
+const backToOrgsFromPlansBtn = document.getElementById('back-to-orgs-from-plans');
+const previewPromoBtn = document.getElementById('preview-promo-btn');
+const subscribeBtn = document.getElementById('subscribe-btn');
+const openAddonBtn = document.getElementById('open-addon-btn');
 
 let currentEmail = '';
 let sessionId = null;
 let selectedOrganization = null;
+let selectedPlan = null;
+let promoPreviewData = null;
 
 function sanitizeEmail(value) {
     let email = String(value || '').trim().toLowerCase();
@@ -47,6 +57,7 @@ function showStep(step) {
     stepEmail.classList.add('hidden');
     stepOtp.classList.add('hidden');
     stepOrgs.classList.add('hidden');
+    stepPlans.classList.add('hidden');
     stepCheckout.classList.add('hidden');
     step.classList.remove('hidden');
     hideAlert();
@@ -153,6 +164,80 @@ checkoutForm.addEventListener('submit', async (event) => {
     }
 });
 
+previewPromoBtn.addEventListener('click', async () => {
+    hideAlert();
+
+    if (!selectedOrganization || !selectedPlan) {
+        showAlert('Elegí un plan primero');
+        return;
+    }
+
+    const promoCode = document.getElementById('promo-code').value.trim();
+    if (!promoCode) {
+        promoPreviewData = null;
+        promoPreview.textContent = '';
+        return;
+    }
+
+    try {
+        promoPreviewData = await apiPost('/promo-codes/preview', {
+            sessionId,
+            organizationId: selectedOrganization.id,
+            planCode: selectedPlan.code,
+            promoCode,
+        });
+
+        promoPreview.textContent = promoPreviewData.requiresPayment
+            ? `Precio final: ${promoPreviewData.finalPrice} ${promoPreviewData.currency}`
+            : 'Cupón válido: activación gratuita sin pasarela de pago.';
+    } catch (error) {
+        promoPreviewData = null;
+        promoPreview.textContent = '';
+        showAlert(error.message);
+    }
+});
+
+subscribeBtn.addEventListener('click', async () => {
+    hideAlert();
+
+    if (!selectedOrganization || !selectedPlan) {
+        showAlert('Elegí un plan primero');
+        return;
+    }
+
+    subscribeBtn.disabled = true;
+
+    try {
+        const promoCode = document.getElementById('promo-code').value.trim();
+        const checkout = await apiPost('/checkout/subscription', {
+            sessionId,
+            organizationId: selectedOrganization.id,
+            planCode: selectedPlan.code,
+            promoCode: promoCode || undefined,
+        });
+
+        if (checkout.status === 'FULFILLED' && checkout.redirectUrl) {
+            window.location.href = checkout.redirectUrl;
+            return;
+        }
+
+        if (!checkout.checkoutUrl) {
+            throw new Error(checkout.message || 'No se pudo iniciar el checkout');
+        }
+
+        window.location.href = checkout.checkoutUrl;
+    } catch (error) {
+        showAlert(error.message);
+    } finally {
+        subscribeBtn.disabled = false;
+    }
+});
+
+openAddonBtn.addEventListener('click', () => {
+    if (!selectedOrganization) return;
+    openAddonCheckout(selectedOrganization);
+});
+
 backToEmailBtn.addEventListener('click', () => {
     document.getElementById('otp').value = '';
     showStep(stepEmail);
@@ -160,6 +245,13 @@ backToEmailBtn.addEventListener('click', () => {
 
 backToOrgsBtn.addEventListener('click', () => {
     selectedOrganization = null;
+    showStep(stepOrgs);
+});
+
+backToOrgsFromPlansBtn.addEventListener('click', () => {
+    selectedOrganization = null;
+    selectedPlan = null;
+    promoPreviewData = null;
     showStep(stepOrgs);
 });
 
@@ -173,12 +265,12 @@ async function loadOrganizations(preferredOrganizationId = null) {
         return organizations;
     }
 
-    checkoutHint.textContent = 'Seleccioná una organización para continuar con el checkout.';
+    checkoutHint.textContent = 'Seleccioná una organización para continuar.';
 
     if (preferredOrganizationId != null) {
         const preferred = organizations.find((org) => org.id === preferredOrganizationId);
         if (preferred) {
-            openCheckout(preferred);
+            await openPlans(preferred);
             return organizations;
         }
     }
@@ -191,14 +283,65 @@ async function loadOrganizations(preferredOrganizationId = null) {
             <h2>${escapeHtml(org.displayName || org.name)}</h2>
             <div class="org-meta">${escapeHtml(org.countryCode || '-')} · ${escapeHtml(org.currency || '-')} · ${escapeHtml(org.role)}</div>
         `;
-        card.addEventListener('click', () => openCheckout(org));
+        card.addEventListener('click', () => openPlans(org));
         orgList.appendChild(card);
     });
 
     return organizations;
 }
 
-function openCheckout(org) {
+async function openPlans(org) {
+    selectedOrganization = org;
+    selectedPlan = null;
+    promoPreviewData = null;
+    document.getElementById('promo-code').value = '';
+    promoPreview.textContent = '';
+    subscribeBtn.disabled = true;
+    plansOrgName.textContent = `Organización: ${org.displayName || org.name}`;
+
+    planList.innerHTML = '<p>Cargando planes...</p>';
+
+    try {
+        const catalog = await apiGet(
+            `/plans?sessionId=${sessionId}&organizationId=${org.id}`
+        );
+
+        planList.innerHTML = '';
+
+        if (!catalog.plans.length) {
+            planList.innerHTML = '<p>No hay planes disponibles.</p>';
+        } else {
+            catalog.plans.forEach((plan) => {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'org-card org-card-btn';
+                card.innerHTML = `
+                    <h2>${escapeHtml(plan.displayName || plan.code)}</h2>
+                    <div class="org-meta">${escapeHtml(plan.description || '')}</div>
+                    <div class="org-meta">${escapeHtml(plan.price)} ${escapeHtml(plan.currency)} / mes</div>
+                `;
+                card.addEventListener('click', () => selectPlan(plan, card));
+                planList.appendChild(card);
+            });
+        }
+
+        showStep(stepPlans);
+    } catch (error) {
+        showAlert(error.message);
+    }
+}
+
+function selectPlan(plan, cardElement) {
+    selectedPlan = plan;
+    subscribeBtn.disabled = false;
+    promoPreviewData = null;
+    promoPreview.textContent = '';
+
+    planList.querySelectorAll('.org-card').forEach((card) => card.classList.remove('selected'));
+    cardElement.classList.add('selected');
+}
+
+function openAddonCheckout(org) {
     selectedOrganization = org;
     checkoutOrgName.textContent = `Organización: ${org.displayName || org.name}`;
 

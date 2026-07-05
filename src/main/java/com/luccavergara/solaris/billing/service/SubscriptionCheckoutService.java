@@ -1,9 +1,10 @@
 package com.luccavergara.solaris.billing.service;
 
+import com.luccavergara.solaris.billing.billing.BillingPricingService;
 import com.luccavergara.solaris.billing.billing.MercadoPagoClient;
 import com.luccavergara.solaris.billing.billing.PaymentProviderResolver;
 import com.luccavergara.solaris.billing.billing.StripeCheckoutService;
-import com.luccavergara.solaris.billing.dto.StoreAddonCheckoutResponse;
+import com.luccavergara.solaris.billing.dto.SubscriptionCheckoutResponse;
 import com.luccavergara.solaris.billing.entity.*;
 import com.luccavergara.solaris.billing.exception.ResourceNotFoundException;
 import com.luccavergara.solaris.billing.repository.*;
@@ -20,8 +21,9 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class StoreAddonCheckoutService {
+public class SubscriptionCheckoutService {
 
+    private static final String PRODUCT_CODE = "SUBSCRIPTION";
     private static final String EXTERNAL_REFERENCE_PREFIX = "solaris:portal-intent:";
 
     private static final List<OrganizationMemberRole> BILLABLE_ROLES = List.of(
@@ -33,15 +35,20 @@ public class StoreAddonCheckoutService {
     private final OrganizationRepository organizationRepository;
     private final OrganizationMemberRepository organizationMemberRepository;
     private final BillingPortalPaymentIntentRepository paymentIntentRepository;
+    private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final MercadoPagoClient mercadoPagoClient;
     private final StripeCheckoutService stripeCheckoutService;
     private final PaymentProviderResolver paymentProviderResolver;
-    private final PaymentFulfillmentService paymentFulfillmentService;
+    private final BillingPricingService billingPricingService;
+    private final BillingPromoCodeService billingPromoCodeService;
     private final SubscriptionFulfillmentService subscriptionFulfillmentService;
     private final EmailService emailService;
 
     @Value("${application.portal.url:http://localhost:8081}")
     private String portalUrl;
+
+    @Value("${application.app.url:https://www.solarismanager.com}")
+    private String appUrl;
 
     @Value("${application.billing.api-public-url:}")
     private String apiPublicUrl;
@@ -49,22 +56,37 @@ public class StoreAddonCheckoutService {
     @Value("${application.billing.mercadopago.use-sandbox:false}")
     private boolean useSandbox;
 
-    @Value("${application.billing.store-addon-price-ars:15000}")
-    private BigDecimal storeAddonPriceArs;
-
-    @Value("${application.billing.store-addon-price-eur:15}")
-    private BigDecimal storeAddonPriceEur;
-
     @Transactional
-    public StoreAddonCheckoutResponse createCheckout(UUID sessionId, Long organizationId, int quantity) {
+    public SubscriptionCheckoutResponse createCheckout(
+            UUID sessionId,
+            Long organizationId,
+            SubscriptionPlanCode planCode,
+            String promoCode
+    ) {
         BillingPortalSession session = sessionRepository.findByIdAndExpiresAtAfter(sessionId, LocalDateTime.now())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired billing session"));
 
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
 
+        subscriptionPlanRepository.findById(planCode)
+                .filter(SubscriptionPlan::isPublic)
+                .filter(SubscriptionPlan::isActive)
+                .orElseThrow(() -> new IllegalArgumentException("Plan is not available for purchase"));
+
         assertBillableMembership(session.getUser(), organization);
         subscriptionFulfillmentService.ensureSubscription(organization);
+
+        BillingPromoCodeService.PromoQuote quote = billingPromoCodeService.resolveQuote(
+                organization,
+                planCode,
+                promoCode,
+                session.getUser().getId()
+        );
+
+        if (quote.finalPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            return fulfillFreeCheckout(session, organization, quote);
+        }
 
         BillingProvider provider = paymentProviderResolver.resolve(organization);
 
@@ -72,8 +94,11 @@ public class StoreAddonCheckoutService {
                 BillingPortalPaymentIntent.builder()
                         .session(session)
                         .organization(organization)
-                        .productCode("STORE_ADDON")
-                        .quantity(quantity)
+                        .productCode(PRODUCT_CODE)
+                        .planCode(quote.effectivePlanCode())
+                        .promoCodeId(quote.promoCode() != null ? quote.promoCode().getId() : null)
+                        .finalAmount(quote.finalPrice())
+                        .quantity(1)
                         .provider(provider.name())
                         .status(BillingPortalPaymentIntentStatus.PENDING)
                         .build()
@@ -84,29 +109,83 @@ public class StoreAddonCheckoutService {
         paymentIntentRepository.save(paymentIntent);
 
         if (provider == BillingProvider.STRIPE) {
-            return createStripeCheckout(paymentIntent, organization, quantity);
+            return createStripeCheckout(paymentIntent, organization, quote);
         }
 
-        return createMercadoPagoCheckout(paymentIntent, organization, quantity);
+        return createMercadoPagoCheckout(paymentIntent, organization, quote);
     }
 
-    private StoreAddonCheckoutResponse createMercadoPagoCheckout(
+    private SubscriptionCheckoutResponse fulfillFreeCheckout(
+            BillingPortalSession session,
+            Organization organization,
+            BillingPromoCodeService.PromoQuote quote
+    ) {
+        BillingPortalPaymentIntent paymentIntent = paymentIntentRepository.save(
+                BillingPortalPaymentIntent.builder()
+                        .session(session)
+                        .organization(organization)
+                        .productCode(PRODUCT_CODE)
+                        .planCode(quote.effectivePlanCode())
+                        .promoCodeId(quote.promoCode() != null ? quote.promoCode().getId() : null)
+                        .finalAmount(BigDecimal.ZERO)
+                        .quantity(1)
+                        .provider(BillingProvider.NONE.name())
+                        .status(BillingPortalPaymentIntentStatus.PAID)
+                        .build()
+        );
+
+        Integer durationDays = quote.promoCode() != null ? quote.promoCode().getDurationDays() : null;
+
+        if (quote.promoCode() != null) {
+            billingPromoCodeService.redeemPromoForCheckout(
+                    quote.promoCode(),
+                    organization,
+                    session.getUser().getId(),
+                    quote.effectivePlanCode()
+            );
+        }
+
+        subscriptionFulfillmentService.applySubscriptionPurchase(
+                organization.getId(),
+                quote.effectivePlanCode(),
+                BillingProvider.NONE,
+                durationDays
+        );
+
+        sendConfirmationEmail(session, organization, paymentIntent.getId());
+
+        return SubscriptionCheckoutResponse.builder()
+                .status("FULFILLED")
+                .message("Plan activated successfully")
+                .redirectUrl(buildAppSuccessUrl())
+                .paymentIntentId(paymentIntent.getId())
+                .provider(BillingProvider.NONE.name())
+                .planCode(quote.effectivePlanCode())
+                .originalPrice(quote.originalPrice())
+                .finalPrice(BigDecimal.ZERO)
+                .discountPercent(quote.discountPercent())
+                .currency(quote.currency())
+                .promoCode(quote.promoCode() != null ? quote.promoCode().getCode() : null)
+                .build();
+    }
+
+    private SubscriptionCheckoutResponse createMercadoPagoCheckout(
             BillingPortalPaymentIntent paymentIntent,
             Organization organization,
-            int quantity
+            BillingPromoCodeService.PromoQuote quote
     ) {
         if (!mercadoPagoClient.isConfigured()) {
             throw new IllegalStateException("Mercado Pago is not configured");
         }
 
-        String returnBase = normalizeBaseUrl(portalUrl) + "/?status=";
+        String returnBase = buildAppSuccessUrl() + (buildAppSuccessUrl().contains("?") ? "&" : "?") + "status=";
         MercadoPagoClient.MercadoPagoPreference preference = mercadoPagoClient.createStoreAddonPreference(
                 new MercadoPagoClient.CreatePreferenceCommand(
-                        "Solaris - Sucursal adicional",
-                        "Compra de " + quantity + " sucursal(es) adicional(es)",
-                        quantity,
-                        storeAddonPriceArs,
-                        "ARS",
+                        "Solaris - Plan " + quote.effectivePlanCode().name(),
+                        "Suscripción plan " + quote.effectivePlanCode().name(),
+                        1,
+                        quote.finalPrice(),
+                        quote.currency(),
                         paymentIntent.getExternalReference(),
                         resolveMercadoPagoNotificationUrl(),
                         returnBase + "success",
@@ -119,110 +198,61 @@ public class StoreAddonCheckoutService {
         paymentIntent.setUpdatedAt(LocalDateTime.now());
         paymentIntentRepository.save(paymentIntent);
 
-        String checkoutUrl = useSandbox ? preference.sandboxInitPoint() : preference.initPoint();
-
-        return StoreAddonCheckoutResponse.builder()
+        return SubscriptionCheckoutResponse.builder()
                 .status("READY")
                 .message("Redirect to Mercado Pago to complete payment")
-                .checkoutUrl(checkoutUrl)
+                .checkoutUrl(useSandbox ? preference.sandboxInitPoint() : preference.initPoint())
                 .paymentIntentId(paymentIntent.getId())
                 .provider(BillingProvider.MERCADOPAGO.name())
-                .quantity(quantity)
-                .unitPrice(storeAddonPriceArs)
-                .currency("ARS")
+                .planCode(quote.effectivePlanCode())
+                .originalPrice(quote.originalPrice())
+                .finalPrice(quote.finalPrice())
+                .discountPercent(quote.discountPercent())
+                .currency(quote.currency())
+                .promoCode(quote.promoCode() != null ? quote.promoCode().getCode() : null)
                 .build();
     }
 
-    private StoreAddonCheckoutResponse createStripeCheckout(
+    private SubscriptionCheckoutResponse createStripeCheckout(
             BillingPortalPaymentIntent paymentIntent,
             Organization organization,
-            int quantity
+            BillingPromoCodeService.PromoQuote quote
     ) {
-        String checkoutUrl = stripeCheckoutService.createCheckoutSession(paymentIntent, organization, quantity);
+        String checkoutUrl = stripeCheckoutService.createSubscriptionCheckoutSession(
+                paymentIntent,
+                organization,
+                quote
+        );
 
         paymentIntent.setStatus(BillingPortalPaymentIntentStatus.CHECKOUT_STARTED);
         paymentIntent.setUpdatedAt(LocalDateTime.now());
         paymentIntentRepository.save(paymentIntent);
 
-        return StoreAddonCheckoutResponse.builder()
+        return SubscriptionCheckoutResponse.builder()
                 .status("READY")
                 .message("Redirect to Stripe to complete payment")
                 .checkoutUrl(checkoutUrl)
                 .paymentIntentId(paymentIntent.getId())
                 .provider(BillingProvider.STRIPE.name())
-                .quantity(quantity)
-                .unitPrice(storeAddonPriceEur)
-                .currency("EUR")
+                .planCode(quote.effectivePlanCode())
+                .originalPrice(quote.originalPrice())
+                .finalPrice(quote.finalPrice())
+                .discountPercent(quote.discountPercent())
+                .currency(quote.currency())
+                .promoCode(quote.promoCode() != null ? quote.promoCode().getCode() : null)
                 .build();
     }
 
-    @Transactional
-    public void processPaymentNotification(String paymentId) {
-        MercadoPagoClient.MercadoPagoPayment payment = mercadoPagoClient.getPayment(paymentId);
-
-        if (!payment.isApproved()) {
+    private void sendConfirmationEmail(BillingPortalSession session, Organization organization, Long paymentIntentId) {
+        if (!StringUtils.hasText(session.getEmail())) {
             return;
         }
 
-        BillingPortalPaymentIntent paymentIntent = resolvePaymentIntent(payment)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment intent not found"));
-
-        if (paymentIntent.getStatus() == BillingPortalPaymentIntentStatus.PAID) {
-            return;
-        }
-
-        paymentFulfillmentService.fulfillPaidIntent(paymentIntent, BillingProvider.MERCADOPAGO);
-
-        sendPurchaseConfirmationEmail(paymentIntent);
-    }
-
-    private void sendPurchaseConfirmationEmail(BillingPortalPaymentIntent paymentIntent) {
-        String email = paymentIntent.getSession().getEmail();
-        if (!StringUtils.hasText(email)) {
-            return;
-        }
-
-        Organization organization = paymentIntent.getOrganization();
         String orgName = organization.getDisplayName() != null
                 ? organization.getDisplayName()
                 : organization.getRazonSocial();
 
-        emailService.sendPurchaseConfirmation(
-                email,
-                orgName,
-                paymentIntent.getQuantity(),
-                "SOL-" + paymentIntent.getId()
-        );
-    }
-
-    private java.util.Optional<BillingPortalPaymentIntent> resolvePaymentIntent(MercadoPagoClient.MercadoPagoPayment payment) {
-        if (StringUtils.hasText(payment.externalReference())) {
-            java.util.Optional<BillingPortalPaymentIntent> byReference = paymentIntentRepository
-                    .findByExternalReference(payment.externalReference());
-
-            if (byReference.isPresent()) {
-                return byReference;
-            }
-        }
-
-        Long paymentIntentId = parsePaymentIntentId(payment.externalReference());
-        if (paymentIntentId == null) {
-            return java.util.Optional.empty();
-        }
-
-        return paymentIntentRepository.findById(paymentIntentId);
-    }
-
-    private Long parsePaymentIntentId(String externalReference) {
-        if (!StringUtils.hasText(externalReference) || !externalReference.startsWith(EXTERNAL_REFERENCE_PREFIX)) {
-            return null;
-        }
-
-        try {
-            return Long.parseLong(externalReference.substring(EXTERNAL_REFERENCE_PREFIX.length()));
-        } catch (NumberFormatException ex) {
-            return null;
-        }
+        emailService.sendPurchaseConfirmation(session.getEmail(), orgName, 1, "SOL-" + paymentIntentId);
     }
 
     private void assertBillableMembership(SolarisUser user, Organization organization) {
@@ -246,6 +276,10 @@ public class StoreAddonCheckoutService {
         }
 
         return normalizeBaseUrl(apiPublicUrl) + "/api/v1/public/webhooks/mercadopago";
+    }
+
+    private String buildAppSuccessUrl() {
+        return normalizeBaseUrl(appUrl) + "/admin/billing";
     }
 
     private String normalizeBaseUrl(String url) {

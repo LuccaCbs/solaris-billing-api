@@ -167,6 +167,12 @@ public class BillingPortalService {
     }
 
     @Transactional(readOnly = true)
+    public void assertValidSession(UUID sessionId) {
+        sessionRepository.findByIdAndExpiresAtAfter(sessionId, LocalDateTime.now())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired billing session"));
+    }
+
+    @Transactional(readOnly = true)
     public List<BillingOrganizationResponse> listOrganizations(UUID sessionId) {
         BillingPortalSession session = sessionRepository.findByIdAndExpiresAtAfter(sessionId, LocalDateTime.now())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired billing session"));

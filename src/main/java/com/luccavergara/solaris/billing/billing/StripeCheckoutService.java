@@ -3,8 +3,9 @@ package com.luccavergara.solaris.billing.billing;
 import com.luccavergara.solaris.billing.entity.*;
 import com.luccavergara.solaris.billing.exception.ResourceNotFoundException;
 import com.luccavergara.solaris.billing.repository.BillingPortalPaymentIntentRepository;
+import com.luccavergara.solaris.billing.service.BillingPromoCodeService;
 import com.luccavergara.solaris.billing.service.EmailService;
-import com.luccavergara.solaris.billing.service.SubscriptionFulfillmentService;
+import com.luccavergara.solaris.billing.service.PaymentFulfillmentService;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Event;
@@ -31,11 +32,14 @@ public class StripeCheckoutService {
     private static final String SESSION_METADATA_KEY = "payment_intent_id";
 
     private final BillingPortalPaymentIntentRepository paymentIntentRepository;
-    private final SubscriptionFulfillmentService subscriptionFulfillmentService;
+    private final PaymentFulfillmentService paymentFulfillmentService;
     private final EmailService emailService;
 
     @Value("${application.portal.url:http://localhost:8081}")
     private String portalUrl;
+
+    @Value("${application.app.url:https://www.solarismanager.com}")
+    private String appUrl;
 
     @Value("${application.billing.stripe.secret-key:}")
     private String secretKey;
@@ -48,6 +52,57 @@ public class StripeCheckoutService {
 
     public boolean isConfigured() {
         return StringUtils.hasText(secretKey);
+    }
+
+    @Transactional
+    public String createSubscriptionCheckoutSession(
+            BillingPortalPaymentIntent paymentIntent,
+            Organization organization,
+            BillingPromoCodeService.PromoQuote quote
+    ) {
+        if (!isConfigured()) {
+            throw new IllegalStateException("Stripe is not configured");
+        }
+
+        Stripe.apiKey = secretKey;
+
+        String successUrl = normalizeBaseUrl(appUrl) + "/admin/billing?status=success";
+        String cancelUrl = normalizeBaseUrl(portalUrl) + "/?status=failure";
+
+        try {
+            SessionCreateParams params = SessionCreateParams.builder()
+                    .setMode(SessionCreateParams.Mode.PAYMENT)
+                    .setSuccessUrl(successUrl)
+                    .setCancelUrl(cancelUrl)
+                    .putMetadata(SESSION_METADATA_KEY, paymentIntent.getId().toString())
+                    .putMetadata("organization_id", organization.getId().toString())
+                    .addLineItem(
+                            SessionCreateParams.LineItem.builder()
+                                    .setQuantity(1L)
+                                    .setPriceData(
+                                            SessionCreateParams.LineItem.PriceData.builder()
+                                                    .setCurrency(quote.currency().toLowerCase())
+                                                    .setUnitAmount(toMinorUnits(quote.finalPrice()))
+                                                    .setProductData(
+                                                            SessionCreateParams.LineItem.PriceData.ProductData.builder()
+                                                                    .setName("Solaris - Plan " + quote.effectivePlanCode().name())
+                                                                    .setDescription(
+                                                                            "Subscription plan " + quote.effectivePlanCode().name()
+                                                                    )
+                                                                    .build()
+                                                    )
+                                                    .build()
+                                    )
+                                    .build()
+                    )
+                    .build();
+
+            Session session = Session.create(params);
+            return session.getUrl();
+        } catch (StripeException ex) {
+            log.error("Failed to create Stripe subscription checkout session: {}", ex.getMessage());
+            throw new IllegalStateException("Could not create Stripe checkout session");
+        }
     }
 
     @Transactional
@@ -144,15 +199,7 @@ public class StripeCheckoutService {
             return;
         }
 
-        paymentIntent.setStatus(BillingPortalPaymentIntentStatus.PAID);
-        paymentIntent.setUpdatedAt(LocalDateTime.now());
-        paymentIntentRepository.save(paymentIntent);
-
-        subscriptionFulfillmentService.applyStoreAddonPurchase(
-                paymentIntent.getOrganization().getId(),
-                paymentIntent.getQuantity(),
-                BillingProvider.STRIPE
-        );
+        paymentFulfillmentService.fulfillPaidIntent(paymentIntent, BillingProvider.STRIPE);
 
         String recipientEmail = paymentIntent.getSession().getEmail();
         if (StringUtils.hasText(recipientEmail)) {

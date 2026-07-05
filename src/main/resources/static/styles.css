@@ -178,3 +178,22 @@ button[type="submit"]:disabled {
     margin-top: 1.25rem;
     font-size: 0.85rem;
 }
+
+.promo-form {
+    margin-top: 1.5rem;
+}
+
+.promo-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.promo-row input {
+    flex: 1;
+}
+
+.org-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}

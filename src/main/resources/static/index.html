@@ -38,7 +38,24 @@
             <h1>Elegí una organización</h1>
             <p>Seleccioná la organización para la que querés gestionar la facturación.</p>
             <div id="org-list" class="org-list"></div>
-            <p class="hint" id="checkout-hint">El checkout con Mercado Pago / Stripe estará disponible en el próximo sprint.</p>
+            <p class="hint" id="checkout-hint">Seleccioná una organización para continuar.</p>
+        </section>
+
+        <section id="step-plans" class="card hidden">
+            <h1>Elegí un plan</h1>
+            <p id="plans-org-name"></p>
+            <div id="plan-list" class="org-list"></div>
+            <form id="promo-form" class="promo-form">
+                <label for="promo-code">Código promocional (opcional)</label>
+                <div class="promo-row">
+                    <input id="promo-code" name="promoCode" type="text" placeholder="SOLARIS-2026">
+                    <button type="button" id="preview-promo-btn">Validar</button>
+                </div>
+                <p id="promo-preview" class="hint"></p>
+            </form>
+            <button type="button" id="subscribe-btn" disabled>Suscribirse</button>
+            <button type="button" class="link-btn" id="open-addon-btn">Comprar sucursal adicional</button>
+            <button type="button" class="link-btn" id="back-to-orgs-from-plans">Elegir otra organización</button>
         </section>
 
         <section id="step-checkout" class="card hidden">
