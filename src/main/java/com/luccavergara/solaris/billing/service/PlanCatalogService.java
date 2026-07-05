@@ -39,10 +39,12 @@ public class PlanCatalogService {
                     false,
                     List.of(
                             "Todo lo incluido en Business",
-                            "Multi-sucursal",
-                            "Gestión centralizada",
-                            "Analytics avanzados",
-                            "1 sucursal incluida"
+                            "Módulo multi-sucursal",
+                            "Dashboard unificado por sucursal",
+                            "Transferencias de stock entre sucursales",
+                            "Reportes consolidados multi-sucursal",
+                            "Gestión centralizada de inventario",
+                            "1 sucursal incluida + adicionales disponibles"
                     )
             )
     );

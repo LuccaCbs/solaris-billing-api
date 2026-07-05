@@ -34,6 +34,11 @@ public class BillingPublicController {
         return billingPortalService.confirmEmail(request.getEmail(), request.getOtp());
     }
 
+    @PostMapping("/session/prefill-from-app-token")
+    public AppBillingPrefillResponse prefillFromAppToken(@Valid @RequestBody AppBillingTokenRequest request) {
+        return billingPortalService.prefillFromAppToken(request.getBillingToken());
+    }
+
     @PostMapping("/session/from-app-token")
     public BillingSessionResponse createSessionFromAppToken(@Valid @RequestBody AppBillingTokenRequest request) {
         return billingPortalService.createSessionFromAppToken(request.getBillingToken());
@@ -78,6 +83,15 @@ public class BillingPublicController {
                 request.getPlanCode(),
                 request.getPromoCode()
         );
+    }
+
+    @GetMapping("/store-addon/quote")
+    public StoreAddonQuoteResponse quoteStoreAddon(
+            @RequestParam UUID sessionId,
+            @RequestParam Long organizationId,
+            @RequestParam(defaultValue = "1") int quantity
+    ) {
+        return storeAddonCheckoutService.getQuote(sessionId, organizationId, quantity);
     }
 
     @PostMapping("/checkout/store-addon")

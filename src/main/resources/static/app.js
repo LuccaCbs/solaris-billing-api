@@ -24,10 +24,15 @@ const checkoutHint = document.getElementById('checkout-hint');
 const promoPreview = document.getElementById('promo-preview');
 const freemiumPromoPreview = document.getElementById('freemium-promo-preview');
 const backToEmailBtn = document.getElementById('back-to-email');
-const backToOrgsBtn = document.getElementById('back-to-orgs');
 const backToOrgsFromPlansBtn = document.getElementById('back-to-orgs-from-plans');
 const backToPlansFromAddonBtn = document.getElementById('back-to-plans-from-addon');
+const backToOrgsFromAddonBtn = document.getElementById('back-to-orgs-from-addon');
 const backToPlansFromFreemiumBtn = document.getElementById('back-to-plans-from-freemium');
+const themeToggleBtn = document.getElementById('theme-toggle');
+const addonUnitPrice = document.getElementById('addon-unit-price');
+const addonSummaryList = document.getElementById('addon-summary-list');
+const addonPricingBreakdown = document.getElementById('addon-pricing-breakdown');
+const quantityInput = document.getElementById('quantity');
 const previewPromoBtn = document.getElementById('preview-promo-btn');
 const previewFreemiumPromoBtn = document.getElementById('preview-freemium-promo-btn');
 const subscribeBtn = document.getElementById('subscribe-btn');
@@ -66,10 +71,12 @@ const FALLBACK_PLAN_META = {
         recommended: false,
         features: [
             'Todo lo incluido en Business',
-            'Multi-sucursal',
-            'Gestión centralizada',
-            'Analytics avanzados',
-            '1 sucursal incluida',
+            'Módulo multi-sucursal',
+            'Dashboard unificado por sucursal',
+            'Transferencias de stock entre sucursales',
+            'Reportes consolidados multi-sucursal',
+            'Gestión centralizada de inventario',
+            '1 sucursal incluida + adicionales disponibles',
         ],
     },
 };
@@ -81,6 +88,9 @@ let selectedPlan = null;
 let freemiumPlan = null;
 let promoPreviewData = null;
 let freemiumPromoPreviewData = null;
+let addonQuote = null;
+
+const THEME_STORAGE_KEY = 'solaris-billing-theme';
 
 function sanitizeEmail(value) {
     let email = String(value || '').trim().toLowerCase();
@@ -139,6 +149,36 @@ async function apiGet(path) {
     }
     return data;
 }
+
+function formatMoney(amount, currency) {
+    const value = Number(amount);
+    if (!Number.isFinite(value)) {
+        return '—';
+    }
+
+    if (currency === 'ARS') {
+        return `${value.toLocaleString('es-AR')} ARS`;
+    }
+
+    return `${value.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
+}
+
+function initTheme() {
+    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    const nextTheme = currentTheme === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+}
+
+initTheme();
+themeToggleBtn.addEventListener('click', toggleTheme);
 
 function formatPrice(price, currency) {
     const amount = Number(price);
@@ -209,7 +249,7 @@ otpForm.addEventListener('submit', async (event) => {
         const otp = document.getElementById('otp').value.trim();
         const session = await apiPost('/confirm-email', { email: currentEmail, otp });
         sessionId = session.sessionId;
-        await loadOrganizations(session.preferredOrganizationId ?? null);
+        await loadOrganizations();
         showStep(stepOrgs);
     } catch (error) {
         showAlert(error.message);
@@ -411,7 +451,7 @@ backToEmailBtn.addEventListener('click', () => {
     showStep(stepEmail);
 });
 
-backToOrgsBtn.addEventListener('click', () => {
+backToOrgsFromAddonBtn.addEventListener('click', () => {
     selectedOrganization = null;
     resetCheckoutPanel();
     showStep(stepOrgs);
@@ -440,7 +480,7 @@ backToPlansFromFreemiumBtn.addEventListener('click', () => {
     }
 });
 
-async function loadOrganizations(preferredOrganizationId = null) {
+async function loadOrganizations() {
     orgList.innerHTML = '';
     const organizations = await apiGet(`/organizations?sessionId=${sessionId}`);
 
@@ -451,14 +491,6 @@ async function loadOrganizations(preferredOrganizationId = null) {
     }
 
     checkoutHint.textContent = 'Seleccioná una organización para continuar.';
-
-    if (preferredOrganizationId != null) {
-        const preferred = organizations.find((org) => org.id === preferredOrganizationId);
-        if (preferred) {
-            await openPlans(preferred);
-            return organizations;
-        }
-    }
 
     organizations.forEach((org) => {
         const card = document.createElement('button');
@@ -542,7 +574,7 @@ function createPlanCard(plan, { isFreemium = false, onSelect } = {}) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = isFreemium ? 'plan-select-btn plan-select-btn--primary' : 'plan-select-btn';
-    button.textContent = isFreemium ? 'Activar con código' : 'Elegir plan';
+    button.textContent = 'Elegir plan';
     button.addEventListener('click', () => onSelect(plan, card));
     card.appendChild(button);
 
@@ -627,30 +659,73 @@ async function openPlans(org, options = {}) {
     }
 }
 
-function openAddonCheckout(org) {
-    selectedOrganization = org;
-    checkoutOrgName.textContent = `Organización: ${org.displayName || org.name}`;
+function renderAddonQuote(quote) {
+    addonQuote = quote;
 
-    const countryCode = String(org.countryCode || '').toUpperCase();
-    const currency = String(org.currency || '').toUpperCase();
-    const isArgentina = countryCode === 'AR';
-    const isStripe = countryCode === 'ES' || currency === 'EUR';
+    addonUnitPrice.textContent = formatMoney(quote.unitPrice, quote.currency);
+
+    addonSummaryList.innerHTML = `
+        <li>Plan actual: ${escapeHtml(quote.currentPlanDisplayName)}</li>
+        <li>Sucursales incluidas: ${quote.currentMaxStores}</li>
+        <li>Sucursales adicionales compradas: ${quote.currentExtraStoresPurchased}</li>
+    `;
+
+    const currentPlanPrice = Number(quote.currentPlanPrice);
+    const currentPlanLine = currentPlanPrice > 0
+        ? `<div class="pricing-row pricing-row--muted"><span>Plan actual</span><span class="pricing-value">${formatMoney(quote.currentPlanPrice, quote.currency)}/mes</span></div>`
+        : `<div class="pricing-row pricing-row--muted"><span>Plan actual</span><span class="pricing-value">${escapeHtml(quote.currentPlanDisplayName)} (sin cargo mensual)</span></div>`;
+
+    addonPricingBreakdown.innerHTML = `
+        ${currentPlanLine}
+        <div class="pricing-row"><span>${quote.quantity} sucursal(es) × ${formatMoney(quote.unitPrice, quote.currency)}</span><span class="pricing-value">${formatMoney(quote.addonSubtotal, quote.currency)}/mes</span></div>
+        <div class="pricing-row pricing-row--total"><span>Total estimado mensual</span><span class="pricing-value">${formatMoney(quote.projectedMonthlyTotal, quote.currency)}/mes</span></div>
+    `;
 
     const checkoutBtn = document.getElementById('checkout-btn');
-    checkoutBtn.disabled = !(isArgentina || isStripe);
-
-    if (isArgentina) {
-        checkoutBtn.textContent = 'Pagar con Mercado Pago';
-    } else if (isStripe) {
+    if (quote.provider === 'STRIPE') {
         checkoutBtn.textContent = 'Pagar con Stripe';
+        checkoutBtn.disabled = false;
+    } else if (quote.provider === 'MERCADOPAGO') {
+        checkoutBtn.textContent = 'Pagar con Mercado Pago';
+        checkoutBtn.disabled = false;
     } else {
         checkoutBtn.textContent = 'Checkout no disponible';
-        showAlert('Checkout no disponible para esta organización.', 'error');
+        checkoutBtn.disabled = true;
+    }
+}
+
+async function refreshAddonQuote() {
+    if (!selectedOrganization || !sessionId) {
+        return;
     }
 
-    document.getElementById('quantity').value = '1';
-    showStep(stepCheckout);
+    const quantity = Number(quantityInput.value || 1);
+    const quote = await apiGet(
+        `/store-addon/quote?sessionId=${sessionId}&organizationId=${selectedOrganization.id}&quantity=${quantity}`
+    );
+    renderAddonQuote(quote);
 }
+
+async function openAddonCheckout(org) {
+    selectedOrganization = org;
+    checkoutOrgName.textContent = `Organización: ${org.displayName || org.name}`;
+    quantityInput.value = '1';
+
+    try {
+        await refreshAddonQuote();
+        showStep(stepCheckout);
+    } catch (error) {
+        showAlert(error.message);
+    }
+}
+
+quantityInput.addEventListener('input', () => {
+    if (stepCheckout.classList.contains('hidden')) {
+        return;
+    }
+
+    void refreshAddonQuote().catch((error) => showAlert(error.message));
+});
 
 function escapeHtml(value) {
     return String(value)
@@ -674,20 +749,17 @@ if (paymentStatus) {
     );
 }
 
-async function tryAppBillingTokenLogin() {
+async function tryAppBillingTokenPrefill() {
     const billingToken = urlParams.get('billingToken');
     if (!billingToken) {
         return false;
     }
 
     try {
-        const session = await apiPost('/session/from-app-token', { billingToken });
-        currentEmail = sanitizeEmail(session.email);
-        sessionId = session.sessionId;
+        const prefill = await apiPost('/session/prefill-from-app-token', { billingToken });
+        currentEmail = sanitizeEmail(prefill.email);
         document.getElementById('email').value = currentEmail;
-        await loadOrganizations(session.preferredOrganizationId ?? null);
-        showStep(stepOrgs);
-        showAlert(`Sesión iniciada como ${currentEmail}`, 'success');
+        showStep(stepEmail);
         return true;
     } catch (error) {
         showAlert(
@@ -698,4 +770,4 @@ async function tryAppBillingTokenLogin() {
     }
 }
 
-void tryAppBillingTokenLogin();
+void tryAppBillingTokenPrefill();

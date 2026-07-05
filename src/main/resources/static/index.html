@@ -1,15 +1,25 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solaris Billing</title>
+    <link rel="icon" type="image/png" href="/assets/solaris-logo-gold.png">
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <main class="container">
         <header class="header">
-            <div class="logo">Solaris</div>
+            <div class="header-top">
+                <div class="brand">
+                    <img class="brand-logo brand-logo--dark" src="/assets/solaris-white-full-logo.png" alt="Solaris">
+                    <img class="brand-logo brand-logo--light" src="/assets/solaris-black-full-logo.png" alt="Solaris">
+                </div>
+                <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema">
+                    <span class="theme-toggle-icon theme-toggle-icon--dark" aria-hidden="true">☀</span>
+                    <span class="theme-toggle-icon theme-toggle-icon--light" aria-hidden="true">☾</span>
+                </button>
+            </div>
             <p class="subtitle">Portal de facturación</p>
         </header>
 
@@ -49,8 +59,8 @@
                     <p id="plans-org-name" class="plans-org-name"></p>
                 </div>
                 <div class="plans-action-bar">
-                    <button type="button" class="action-link" id="open-addon-btn">Comprar sucursal adicional</button>
-                    <button type="button" class="action-link" id="back-to-orgs-from-plans">Cambiar organización</button>
+                    <button type="button" class="nav-btn" id="open-addon-btn">Comprar sucursal adicional</button>
+                    <button type="button" class="nav-btn nav-btn--ghost" id="back-to-orgs-from-plans">Cambiar organización</button>
                 </div>
             </div>
 
@@ -72,6 +82,9 @@
         </section>
 
         <section id="step-freemium-redeem" class="card hidden">
+            <div class="step-nav">
+                <button type="button" class="nav-btn" id="back-to-plans-from-freemium">← Volver a planes</button>
+            </div>
             <h1>Activar Freemium / POS</h1>
             <p id="freemium-org-name"></p>
             <p>Ingresá tu código promocional para activar el plan gratuito.</p>
@@ -84,19 +97,43 @@
                 <p id="freemium-promo-preview" class="hint"></p>
                 <button type="submit" id="redeem-freemium-btn" class="btn-primary">Activar plan</button>
             </form>
-            <button type="button" class="link-btn" id="back-to-plans-from-freemium">Volver a planes</button>
         </section>
 
-        <section id="step-checkout" class="card hidden">
-            <h1>Comprar sucursal adicional</h1>
-            <p id="checkout-org-name"></p>
-            <form id="checkout-form">
-                <label for="quantity">Cantidad</label>
-                <input id="quantity" name="quantity" type="number" min="1" max="10" value="1" required>
-                <button type="submit" id="checkout-btn">Pagar con Mercado Pago</button>
-            </form>
-            <button type="button" class="link-btn" id="back-to-plans-from-addon">Volver a planes</button>
-            <button type="button" class="link-btn" id="back-to-orgs">Cambiar organización</button>
+        <section id="step-checkout" class="hidden">
+            <div class="step-nav">
+                <button type="button" class="nav-btn" id="back-to-plans-from-addon">← Volver a planes</button>
+                <button type="button" class="nav-btn nav-btn--ghost" id="back-to-orgs-from-addon">Cambiar organización</button>
+            </div>
+
+            <div class="card card--wide">
+                <div class="addon-header">
+                    <div>
+                        <h1>Comprar sucursal adicional</h1>
+                        <p id="checkout-org-name" class="plans-org-name"></p>
+                    </div>
+                </div>
+
+                <article class="plan-card addon-card">
+                    <h2 class="plan-name">Sucursal adicional</h2>
+                    <p class="plan-tagline">Ampliá la capacidad operativa de tu organización.</p>
+
+                    <div class="plan-price-block">
+                        <div id="addon-unit-price" class="plan-price">—</div>
+                        <span class="plan-price-period">por sucursal / mes</span>
+                    </div>
+
+                    <ul id="addon-summary-list" class="plan-features addon-summary"></ul>
+
+                    <form id="checkout-form" class="addon-form">
+                        <label for="quantity">Cantidad de sucursales</label>
+                        <input id="quantity" name="quantity" type="number" min="1" max="10" value="1" required>
+
+                        <div id="addon-pricing-breakdown" class="pricing-breakdown"></div>
+
+                        <button type="submit" id="checkout-btn" class="btn-primary">Pagar con Mercado Pago</button>
+                    </form>
+                </article>
+            </div>
         </section>
 
         <div id="alert" class="alert hidden" role="alert"></div>

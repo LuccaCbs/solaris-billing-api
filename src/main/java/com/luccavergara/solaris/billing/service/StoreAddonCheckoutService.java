@@ -1,9 +1,11 @@
 package com.luccavergara.solaris.billing.service;
 
+import com.luccavergara.solaris.billing.billing.BillingPricingService;
 import com.luccavergara.solaris.billing.billing.MercadoPagoClient;
 import com.luccavergara.solaris.billing.billing.PaymentProviderResolver;
 import com.luccavergara.solaris.billing.billing.StripeCheckoutService;
 import com.luccavergara.solaris.billing.dto.StoreAddonCheckoutResponse;
+import com.luccavergara.solaris.billing.dto.StoreAddonQuoteResponse;
 import com.luccavergara.solaris.billing.entity.*;
 import com.luccavergara.solaris.billing.exception.ResourceNotFoundException;
 import com.luccavergara.solaris.billing.repository.*;
@@ -39,6 +41,8 @@ public class StoreAddonCheckoutService {
     private final PaymentFulfillmentService paymentFulfillmentService;
     private final SubscriptionFulfillmentService subscriptionFulfillmentService;
     private final EmailService emailService;
+    private final BillingPricingService billingPricingService;
+    private final SubscriptionPlanRepository subscriptionPlanRepository;
 
     @Value("${application.portal.url:http://localhost:8081}")
     private String portalUrl;
@@ -54,6 +58,48 @@ public class StoreAddonCheckoutService {
 
     @Value("${application.billing.store-addon-price-eur:15}")
     private BigDecimal storeAddonPriceEur;
+
+    @Transactional(readOnly = true)
+    public StoreAddonQuoteResponse getQuote(UUID sessionId, Long organizationId, int quantity) {
+        if (quantity < 1 || quantity > 10) {
+            throw new IllegalArgumentException("Quantity must be between 1 and 10");
+        }
+
+        BillingPortalSession session = sessionRepository.findByIdAndExpiresAtAfter(sessionId, LocalDateTime.now())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired billing session"));
+
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
+
+        assertBillableMembership(session.getUser(), organization);
+
+        OrganizationSubscription subscription = subscriptionFulfillmentService.ensureSubscription(organization);
+        BillingProvider provider = paymentProviderResolver.resolve(organization);
+        String currency = billingPricingService.resolveCurrency(organization);
+        BigDecimal unitPrice = billingPricingService.getStoreAddonPrice(organization);
+        BigDecimal addonSubtotal = unitPrice.multiply(BigDecimal.valueOf(quantity));
+        BigDecimal currentPlanPrice = billingPricingService.getPlanPrice(organization, subscription.getPlanCode());
+
+        String planDisplayName = subscriptionPlanRepository.findById(subscription.getPlanCode())
+                .map(SubscriptionPlan::getDisplayName)
+                .orElse(subscription.getPlanCode().name());
+
+        BigDecimal projectedMonthlyTotal = currentPlanPrice.add(addonSubtotal);
+
+        return StoreAddonQuoteResponse.builder()
+                .currency(currency)
+                .unitPrice(unitPrice)
+                .quantity(quantity)
+                .addonSubtotal(addonSubtotal)
+                .currentPlanCode(subscription.getPlanCode().name())
+                .currentPlanDisplayName(planDisplayName)
+                .currentPlanPrice(currentPlanPrice)
+                .currentMaxStores(subscription.getMaxStores())
+                .currentExtraStoresPurchased(subscription.getExtraStoresPurchased())
+                .projectedMonthlyTotal(projectedMonthlyTotal)
+                .provider(provider.name())
+                .build();
+    }
 
     @Transactional
     public StoreAddonCheckoutResponse createCheckout(UUID sessionId, Long organizationId, int quantity) {

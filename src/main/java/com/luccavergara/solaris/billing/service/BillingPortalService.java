@@ -1,5 +1,6 @@
 package com.luccavergara.solaris.billing.service;
 
+import com.luccavergara.solaris.billing.dto.AppBillingPrefillResponse;
 import com.luccavergara.solaris.billing.dto.BillingOrganizationResponse;
 import com.luccavergara.solaris.billing.dto.BillingSessionResponse;
 import com.luccavergara.solaris.billing.dto.MessageResponse;
@@ -126,21 +127,21 @@ public class BillingPortalService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public AppBillingPrefillResponse prefillFromAppToken(String billingToken) {
+        SolarisJwtService.AppBillingClaims claims = solarisJwtService.parseAppBillingToken(billingToken);
+        assertBillableAppTokenClaims(claims);
+
+        return AppBillingPrefillResponse.builder()
+                .email(claims.email())
+                .preferredOrganizationId(claims.organizationId())
+                .build();
+    }
+
     @Transactional
     public BillingSessionResponse createSessionFromAppToken(String billingToken) {
         SolarisJwtService.AppBillingClaims claims = solarisJwtService.parseAppBillingToken(billingToken);
-
-        OrganizationMemberRole role = organizationMemberRepository
-                .findRoleByOrganizationIdAndUserEmailIgnoreCaseAndStatus(
-                        claims.organizationId(),
-                        claims.email(),
-                        OrganizationMemberStatus.ACTIVE
-                )
-                .orElseThrow(() -> new IllegalArgumentException("Billing token is no longer valid for this organization"));
-
-        if (role.getPrivilegeLevel() < OrganizationMemberRole.ADMIN.getPrivilegeLevel()) {
-            throw new IllegalStateException("This email is not authorized to manage billing for this organization");
-        }
+        assertBillableAppTokenClaims(claims);
 
         SolarisUser user = userRepository.findById(claims.userId())
                 .filter(found -> found.getEmail().equalsIgnoreCase(claims.email()))
@@ -202,6 +203,24 @@ public class BillingPortalService {
                 .currency(organization.getDefaultCurrency())
                 .role(membership.getRole())
                 .build();
+    }
+
+    private void assertBillableAppTokenClaims(SolarisJwtService.AppBillingClaims claims) {
+        OrganizationMemberRole role = organizationMemberRepository
+                .findRoleByOrganizationIdAndUserEmailIgnoreCaseAndStatus(
+                        claims.organizationId(),
+                        claims.email(),
+                        OrganizationMemberStatus.ACTIVE
+                )
+                .orElseThrow(() -> new IllegalArgumentException("Billing token is no longer valid for this organization"));
+
+        if (role.getPrivilegeLevel() < OrganizationMemberRole.ADMIN.getPrivilegeLevel()) {
+            throw new IllegalStateException("This email is not authorized to manage billing for this organization");
+        }
+
+        userRepository.findById(claims.userId())
+                .filter(found -> found.getEmail().equalsIgnoreCase(claims.email()))
+                .orElseThrow(() -> new IllegalArgumentException("Billing token is no longer valid for this user"));
     }
 
     private String normalizeEmail(String email) {
